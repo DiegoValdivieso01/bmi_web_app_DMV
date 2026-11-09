@@ -1,0 +1,77 @@
+# Primero instalamos la librería necesaria para la integración con Azure Storage
+# !pip install azure-storage-blob
+
+import os
+
+def calcular_interes_compuesto(capital_inicial, tasa_interes_anual, tiempo_anos):
+    """
+    Calcula el capital final usando la fórmula: Capital final = C₀ * (1 + i)^t
+    """
+    # Convertir el porcentaje a decimal
+    i = tasa_interes_anual / 100
+    capital_final = capital_inicial * ((1 + i) ** tiempo_anos)
+    return capital_final
+
+def guardar_en_azure(capital_inicial, tasa, tiempo, total):
+    """
+    Ejemplo de integración con Microsoft Azure para guardar el cálculo en un Blob Storage
+    """
+    # Nota: Para usar esto en producción, debes configurar tu cadena de conexión de Azure
+    connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    if not connection_string:
+        print("\n[Azure] Nota: No se detectó 'AZURE_STORAGE_CONNECTION_STRING'. El cálculo no se subirá a Azure Storage.")
+        return
+    
+    try:
+        from azure.storage.blob import BlobServiceClient
+        blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+        container_name = "calculos-prestamos"
+        
+        # Crear el contenedor si no existe
+        container_client = blob_service_client.get_container_client(container_name)
+        if not container_client.exists():
+            container_client.create_container()
+            
+        # Crear el contenido a guardar
+        contenido = f"Capital Inicial: {capital_inicial}\nTasa: {tasa}%\nTiempo: {tiempo} años\nTotal: {total}\n"
+        blob_client = blob_service_client.get_blob_client(container=container_name, blob="ultimo_calculo.txt")
+        blob_client.upload_blob(contenido, overwrite=True)
+        print("[Azure] Datos guardados exitosamente en Azure Blob Storage.")
+    except Exception as e:
+        print(f"[Azure] Error al conectar con Azure: {e}")
+
+def main():
+    print("--- Simulador de Interés Compuesto ---")
+    
+    # Entrada: Capital Inicial
+    c0 = float(input("Ingrese el capital inicial (C₀): "))
+    
+    # Entrada: Tiempo en años
+    t = float(input("Ingrese el tiempo en años (t): "))
+    
+    # Validación de tasa de usura en Colombia (ejemplo referencial: ~40% anual)
+    # Nota: La tasa de usura cambia mensualmente en Colombia y es definida por la Superfinanciera.
+    TASA_USURA_MAX = 40.0 
+    
+    while True:
+        i_anual = float(input(f"Ingrese la tasa de interés anual (%) (Máximo legal permitido {TASA_USURA_MAX}%): "))
+        if i_anual > TASA_USURA_MAX:
+            print(f"¡Alerta! La tasa del {i_anual}% supera el límite de usura permitido por las leyes colombianas ({TASA_USURA_MAX}%).")
+            print("Por favor ingrese una tasa válida.")
+        else:
+            break
+            
+    # Cálculo del interés compuesto
+    capital_final = calcular_interes_compuesto(c0, i_anual, t)
+    
+    print("\n--- RESULTADOS ---")
+    print(f"Capital inicial: ${c0:,.2f}")
+    print(f"Tasa de interés: {i_anual}%")
+    print(f"Tiempo: {t} años")
+    print(f"Capital final acumulado: ${capital_final:,.2f}")
+    
+    # Integración con Azure
+    guardar_en_azure(c0, i_anual, t, capital_final)
+
+# Ejecutar el simulador
+main()
